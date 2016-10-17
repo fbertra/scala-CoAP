@@ -5,5 +5,5 @@ See https://tools.ietf.org/html/rfc7252 and http://coap.technology/
 
 Second step: cross compile it with Scala-native.
 
-Third step: run hello world app above LK or Solo5
+Third step: run a hello world app above LK or Solo5
 
