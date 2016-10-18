@@ -36,7 +36,7 @@ class CoapDestinationEndpoint extends CoapUtil {
       try {
         val byte0 = udpPayload(offsetIni)
 
-        val smallDelta = byte0 >> 4
+        val smallDelta = (byte0 & 0xF0) >>> 4
 
         val (offsetAfterDelta, delta) = if (smallDelta == 15)
           throw new CoapMessageFormatException ("Option delta equals 15")
@@ -48,14 +48,23 @@ class CoapDestinationEndpoint extends CoapUtil {
           (offsetIni + 1, smallDelta)
 
         val smallLength = byte0 & 0x0F
-        val (offsetAfterLength, length) = if (smallLength == 15)
+        val (offsetAfterLength, length) = if (smallLength == 15.toByte)
           throw new CoapMessageFormatException ("Option length equals 15")
         else if (smallLength == 14)
           (offsetAfterDelta + 2, parseInt(udpPayload, offsetAfterDelta) - 269)
-        else if (smallDelta == 13)
+        else if (smallLength == 13)
           (offsetAfterDelta + 1, udpPayload (offsetAfterDelta).toInt - 13)
         else
           (offsetAfterDelta, smallLength)
+        
+        /*
+        debug ("length: " + length)
+        debug ("offsetIni: " + offsetIni)
+        debug ("offsetAfterDelta: " + offsetAfterDelta)
+        debug ("offsetAfterLength: " + offsetAfterLength)
+        debug ("smallDelta: " + smallDelta)
+        debug ("smallLength: " + smallLength)
+        */
         
         val optionValue = new Array[Byte] (length)
         scala.Array.copy(udpPayload, offsetAfterLength, optionValue, 0, length)
@@ -66,7 +75,7 @@ class CoapDestinationEndpoint extends CoapUtil {
       }
       catch {
         case ex: IndexOutOfBoundsException => {
-          // ex.printStackTrace ()
+          // debug (ex)
           throw new CoapMessageFormatException ("UDP payload too small " + udpPayload.length + " during options parsing") 
         }
       }
@@ -95,7 +104,7 @@ class CoapDestinationEndpoint extends CoapUtil {
         finished = true
     }
 
-    (offset, list.toArray)
+    (offset, list.toArray.reverse)
   }
 
   /*
@@ -111,7 +120,7 @@ class CoapDestinationEndpoint extends CoapUtil {
 
     val byte0 = udpPayload(0)
     
-    val version = byte0 >> 6
+    val version = (byte0 & 0xF0) >>> 6
     if (version != 1)
       throw new CoapMessageFormatException ("Unexpected version " + version)
 
