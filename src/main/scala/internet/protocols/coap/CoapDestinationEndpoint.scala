@@ -134,7 +134,7 @@ class CoapDestinationEndpoint extends CoapUtil {
       throw new CoapMessageFormatException ("UDP payload too small " + udpPayload.length + " < " + minLen)
     }
 
-    val code = udpPayload(1)
+    val code = udpPayload(1) & 0xFF
 
     val messageId = toInt(udpPayload(2), udpPayload(3))
 
@@ -157,7 +157,7 @@ class CoapDestinationEndpoint extends CoapUtil {
     else
       new Array[Byte](0)
 
-    CoapMessage (version, msgType, tokenLength, code, messageId, token, options, payload)
+    CoapMessage (msgType, code, messageId, token, options, payload)
   }
   
   /*

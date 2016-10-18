@@ -292,9 +292,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     val smallest = ep.parsePayload (msg)
 
     val cmp = CoapMessage (
-      version = 1, 
       msgType = 1, 
-      tokenLength = 0, 
       code = 1 << 5,
       messageId = 256 + 4,
       token = new Array[Byte] (0),
@@ -336,9 +334,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     token(3) = 'D'.toByte
 
     val cmp = CoapMessage (
-      version = 1,
       msgType = 1,
-      tokenLength = 4,
       code = 1 << 5,
       messageId = 256 + 4,
       token = token,
@@ -361,9 +357,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     payload(3) = 'd'.toByte
 
     val cmp = CoapMessage (
-      version = 1,
       msgType = 1,
-      tokenLength = 0,
       code = 1 << 5,
       messageId = 256 + 4,
       token = new Array[Byte] (0),
@@ -393,9 +387,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     options(0) = CoapOption (3, "abcd".getBytes)    
     
     val cmp = CoapMessage (
-      version = 1,
       msgType = 1,
-      tokenLength = 0,
       code = 1 << 5,
       messageId = 256 + 4,
       token = new Array[Byte] (0),
@@ -417,9 +409,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     options(1) = CoapOption (5, "123".getBytes)    
     
     val cmp = CoapMessage (
-      version = 1,
       msgType = 1,
-      tokenLength = 0,
       code = 1 << 5,
       messageId = 256 + 4,
       token = new Array[Byte] (0),
@@ -441,9 +431,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     options(1) = CoapOption (21, "1234567890abcdefg".getBytes)    
     
     val cmp = CoapMessage (
-      version = 1,
       msgType = 1,
-      tokenLength = 0,
       code = 1 << 5,
       messageId = 256 + 4,
       token = new Array[Byte] (0),
@@ -471,9 +459,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     payload(3) = 'D'.toByte
     
     val cmp = CoapMessage (
-      version = 1,
       msgType = 1,
-      tokenLength = 0,
       code = 1 << 5,
       messageId = 256 + 4,
       token = new Array[Byte] (0),
