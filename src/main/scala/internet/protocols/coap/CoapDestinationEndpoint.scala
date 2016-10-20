@@ -41,9 +41,9 @@ class CoapDestinationEndpoint extends CoapUtil {
         val (offsetAfterDelta, delta) = if (smallDelta == 15)
           throw new CoapMessageFormatException ("Option delta equals 15")
         else if (smallDelta == 14)
-          (offsetIni + 3, parseInt(udpPayload, offsetIni+1) - 269)
+          (offsetIni + 3, parseInt(udpPayload, offsetIni+1) + 269)
         else if (smallDelta == 13)
-          (offsetIni + 2, udpPayload (offsetIni+1).toInt - 13)
+          (offsetIni + 2, udpPayload (offsetIni+1).toInt + 13)
         else
           (offsetIni + 1, smallDelta)
 
@@ -51,9 +51,9 @@ class CoapDestinationEndpoint extends CoapUtil {
         val (offsetAfterLength, length) = if (smallLength == 15.toByte)
           throw new CoapMessageFormatException ("Option length equals 15")
         else if (smallLength == 14)
-          (offsetAfterDelta + 2, parseInt(udpPayload, offsetAfterDelta) - 269)
+          (offsetAfterDelta + 2, parseInt(udpPayload, offsetAfterDelta) + 269)
         else if (smallLength == 13)
-          (offsetAfterDelta + 1, udpPayload (offsetAfterDelta).toInt - 13)
+          (offsetAfterDelta + 1, udpPayload (offsetAfterDelta).toInt + 13)
         else
           (offsetAfterDelta, smallLength)
         

@@ -118,18 +118,18 @@ object MessageFactory {
   val okTKL0_O_16_abcd_O_21_1234567890abcdefg = // length value option == 17 
                        toArrayByte ("01010000010000000000000100000100" +
                                     "11010100" + // 13 | 4. delta = 16, length = 4
-                                    "00011101" + // 29 = 16 + 13
+                                    "00000011" + // 3 = 16 - 13
                                     "01100001" + // 'a', 97
                                     "01100010" + // 'b', 98
                                     "01100011" + // 'd', 99
                                     "01100100" + // 'd', 100
                                     "01011101" + // 5 } 13, delta = 5, length = 17
-                                    "00011110" + // 30 = 13 + 17
+                                    "00000100" + // 4 = 17 - 13
                                     "00110001" + // '1', 49=32+16+1
                                     "00110010" + // '2', 50
                                     "00110011" + // '3', 51
-                                    "00110100" + // '4', 52  
-                                    "00110101" + // '5', 53  
+                                    "00110100" + // '4', 52
+                                    "00110101" + // '5', 53
                                     "00110110" + // '6', 54
                                     "00110111" + // '7', 55
                                     "00111000" + // '8', 56 32+16+8
@@ -146,13 +146,47 @@ object MessageFactory {
   val okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD = // length value option == 17 
                        toArrayByte ("01010000010000000000000100000100" +
                                     "11010100" + // 13 | 4. delta = 16, length = 4
-                                    "00011101" + // 29 = 16 + 13
+                                    "00000011" + // 3 = 16 - 13
                                     "01100001" + // 'a', 97
                                     "01100010" + // 'b', 98
                                     "01100011" + // 'd', 99
                                     "01100100" + // 'd', 100
                                     "01011101" + // 5 } 13, delta = 5, length = 17
-                                    "00011110" + // 30 = 13 + 17
+                                    "00000100" + // 4 = 17 - 13
+                                    "00110001" + // '1', 49=32+16+1
+                                    "00110010" + // '2', 50
+                                    "00110011" + // '3', 51
+                                    "00110100" + // '4', 52  
+                                    "00110101" + // '5', 53  
+                                    "00110110" + // '6', 54
+                                    "00110111" + // '7', 55
+                                    "00111000" + // '8', 56 32+16+8
+                                    "00111001" + // '8', 57
+                                    "00110000" + // '0', 48
+                                    "01100001" + // 'a', 97
+                                    "01100010" + // 'b', 98
+                                    "01100011" + // 'd', 99
+                                    "01100100" + // 'd', 100
+                                    "01100101" + // 'e', 101
+                                    "01100110" + // 'f', 102
+                                    "01100111" + // 'g', 103
+                                    "11111111" + // marker
+                                    "01000001" + // A
+                                    "01000010" + // B
+                                    "01000011" + // C
+                                    "01000100")  // D
+
+  val okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD = // length value option == 17 
+                       toArrayByte ("01010000010000000000000100000100" +
+                                    "11100100" + // 14 | 4. delta = 300, length = 4
+                                    "00000000" +
+                                    "00011111" + // 31 == 300 - 269
+                                    "01100001" + // 'a', 97
+                                    "01100010" + // 'b', 98
+                                    "01100011" + // 'd', 99
+                                    "01100100" + // 'd', 100
+                                    "01011101" + // 5 } 13, delta = 5, length = 17
+                                    "00000100" + // 4 = 17 - 13
                                     "00110001" + // '1', 49=32+16+1
                                     "00110010" + // '2', 50
                                     "00110011" + // '3', 51
@@ -241,7 +275,8 @@ trait CoapMessageMatchers {
  */
 class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
 
-  val ep = new CoapDestinationEndpoint()
+  val destEp = new CoapDestinationEndpoint()
+  val oriEp = new CoapOriginatingEndpoint()
 
   // test the test method
   "test1" should  "equals 1" in {
@@ -273,7 +308,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       
       println ("too small: " + msg.mkString (","))
 
-      ep.parsePayload (msg)
+      destEp.parsePayload (msg)
     }
   } 
   
@@ -282,14 +317,14 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       val msg = MessageFactory.invalidVersion
       println ("invalid version: " + msg.mkString (","))
 
-      ep.parsePayload (msg)
+      destEp.parsePayload (msg)
     }
   } 
   
   "smallest" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options, payload" in {
     val msg = MessageFactory.okSmallest
    
-    val smallest = ep.parsePayload (msg)
+    val smallest = destEp.parsePayload (msg)
 
     val cmp = CoapMessage (
       msgType = 1, 
@@ -301,6 +336,10 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     )
    
     cmp should sameMessage (smallest)
+    
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
   }
  
   // 
@@ -308,7 +347,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     a [CoapMessageFormatException] should be thrownBy {
       val msg = MessageFactory.tooSmall2
       
-      ep.parsePayload (msg)
+      destEp.parsePayload (msg)
     }
   }
   
@@ -317,7 +356,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     a [CoapMessageFormatException] should be thrownBy {
       val msg = MessageFactory._TKLReserved
       
-      ep.parsePayload (msg)
+      destEp.parsePayload (msg)
     }
   }
   
@@ -325,7 +364,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL4_ABCD" should "be version 1, type 1, tkl 4, code 2.00, message id 300, token=ABCD, empty options/payload" in {
     val msg = MessageFactory.okTKL4_ABCD
 
-    val okTKL4_ABCD = ep.parsePayload (msg)
+    val okTKL4_ABCD = destEp.parsePayload (msg)
 
     val token = new Array[Byte] (4)
     token(0) = 'A'.toByte
@@ -341,14 +380,18 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       options = new Array[CoapOption] (0),
       payload = new Array[Byte] (0)
     )
-   
+
     cmp should sameMessage (okTKL4_ABCD)
+
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
   }
   
   "okTKL0_abcd" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token/options, payload=abcd" in {
     val msg = MessageFactory.okTKL0_abcd
 
-    val okTKL0_abcd = ep.parsePayload (msg)
+    val okTKL0_abcd = destEp.parsePayload (msg)
 
     val payload = new Array[Byte](4) 
     payload(0) = 'a'.toByte
@@ -364,8 +407,12 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       options = new Array[CoapOption] (0),
       payload = payload
     )
-   
+
     cmp should sameMessage (okTKL0_abcd)
+
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
   }
   
   // 
@@ -373,7 +420,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     a [CoapMessageFormatException] should be thrownBy {
       val msg = MessageFactory.finishTKL0_FF
       
-      ep.parsePayload (msg)
+      destEp.parsePayload (msg)
     }
   }
   
@@ -381,7 +428,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL0_Option1_3_abcd" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(3,abcd), empty payload" in {
     val msg = MessageFactory.okTKL0_O_3_abcd
 
-    val okTKL0_O_3_abcd = ep.parsePayload (msg)
+    val okTKL0_O_3_abcd = destEp.parsePayload (msg)
 
     val options = new Array[CoapOption] (1)
     options(0) = CoapOption (3, "abcd".getBytes)    
@@ -396,13 +443,17 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     )
    
     cmp should sameMessage (okTKL0_O_3_abcd)
+
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
   }
   
   //
   "okTKL0_O_3_abcd_O_5_123" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(3,abcd)::(5,123), empty payload" in {
     val msg = MessageFactory.okTKL0_O_3_abcd_O_5_123
 
-    val okTKL0_O_3_abcd_O_5_123 = ep.parsePayload (msg)
+    val okTKL0_O_3_abcd_O_5_123 = destEp.parsePayload (msg)
 
     val options = new Array[CoapOption] (2)
     options(0) = CoapOption (3, "abcd".getBytes)    
@@ -416,20 +467,23 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       options = options,
       payload = new Array[Byte] (0)
     )
-   
+
     cmp should sameMessage (okTKL0_O_3_abcd_O_5_123)
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
   }
   
   //
   "okTKL0_O_16_abcd_O_21_1234567890abcdefg" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(16,abcd)::(21,1234567890abcdefg), empty payload" in {
     val msg = MessageFactory.okTKL0_O_16_abcd_O_21_1234567890abcdefg
 
-    val okTKL0_O_16_abcd_O_21_1234567890abcdefg = ep.parsePayload (msg)
+    val okTKL0_O_16_abcd_O_21_1234567890abcdefg = destEp.parsePayload (msg)
 
     val options = new Array[CoapOption] (2)
     options(0) = CoapOption (16, "abcd".getBytes)    
     options(1) = CoapOption (21, "1234567890abcdefg".getBytes)    
-    
+
     val cmp = CoapMessage (
       msgType = 1,
       code = 1 << 6,
@@ -438,26 +492,29 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       options = options,
       payload = new Array[Byte] (0)
     )
-   
+
     cmp should sameMessage (okTKL0_O_16_abcd_O_21_1234567890abcdefg)
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
   }
   
   //
   "okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(16,abcd)::(21,1234567890abcdefg), payload=ABCD" in {
     val msg = MessageFactory.okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD
 
-    val okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD = ep.parsePayload (msg)
+    val okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD = destEp.parsePayload (msg)
 
     val options = new Array[CoapOption] (2)
     options(0) = CoapOption (16, "abcd".getBytes)    
     options(1) = CoapOption (21, "1234567890abcdefg".getBytes)    
-    
+
     val payload = new Array[Byte](4) 
     payload(0) = 'A'.toByte
     payload(1) = 'B'.toByte
     payload(2) = 'C'.toByte
     payload(3) = 'D'.toByte
-    
+
     val cmp = CoapMessage (
       msgType = 1,
       code = 1 << 6,
@@ -466,7 +523,41 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       options = options,
       payload = payload
     )
-   
+
     cmp should sameMessage (okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD)
-  }  
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
+  }
+
+  //
+  "okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(16,abcd)::(21,1234567890abcdefg), payload=ABCD" in {
+    val msg = MessageFactory.okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD
+
+    val okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD = destEp.parsePayload (msg)
+
+    val options = new Array[CoapOption] (2)
+    options(0) = CoapOption (300, "abcd".getBytes)    
+    options(1) = CoapOption (305, "1234567890abcdefg".getBytes)    
+
+    val payload = new Array[Byte](4) 
+    payload(0) = 'A'.toByte
+    payload(1) = 'B'.toByte
+    payload(2) = 'C'.toByte
+    payload(3) = 'D'.toByte
+
+    val cmp = CoapMessage (
+      msgType = 1,
+      code = 1 << 6,
+      messageId = 256 + 4,
+      token = new Array[Byte] (0),
+      options = options,
+      payload = payload
+    )
+
+    cmp should sameMessage (okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD)
+    //
+    val msg2 = oriEp.formatPayload (cmp)
+    msg2 should be (msg) 
+  }
 }
