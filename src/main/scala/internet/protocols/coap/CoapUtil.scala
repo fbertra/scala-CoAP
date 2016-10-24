@@ -4,7 +4,21 @@ trait CoapUtil {
   def log(msg: String) = {
     println(msg)
   }
-
+  
+  def log(msg: String, th: Throwable) = {
+    println(msg)
+  }
+  
+  def logMessageError(payload: Array[Byte], th: Throwable) = {
+    println(th.getMessage)
+    println(payload.mkString (","))
+  }
+  
+  def logMessageError(coapMessage: CoapMessage, th: Throwable) = {
+    println(th.getMessage)
+    println(coapMessage.toString)
+  }
+  
   def debug(msg: String) = {
     println(msg)
   }

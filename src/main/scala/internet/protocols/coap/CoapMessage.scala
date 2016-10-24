@@ -1,13 +1,18 @@
 package internet.protocols.coap
 
+/*
+ * Constants used internally
+ * 
+ * not visible to client API
+ */
 object CoapMessageConstants {
- // code: Method code, Response code
+ // class code
   val RequestClassCode = 0
   val SuccessResponseClassCode = 2
   val ClientErrorResponseClassCode = 4
   val ServerErrorResponseClassCode = 5
-
-// type: Confirmable, Non-confirmable, Acknowledgement, 
+  
+  // type: Confirmable, Non-confirmable, Acknowledgement, 
   val ConfirmableType = 0
   val NonConfirmableType = 1
   val AcknowledgementType = 2
@@ -44,7 +49,7 @@ case class CoapMessage(
    *
    */
   def codeDD = code & 0x1F
-
+  
   /*
    *
    */

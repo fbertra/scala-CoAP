@@ -275,8 +275,7 @@ trait CoapMessageMatchers {
  */
 class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
 
-  val destEp = new CoapDestinationEndpoint()
-  val oriEp = new CoapOriginatingEndpoint()
+  val ep = new CoapEndpoint(9999)
 
   // test the test method
   "test1" should  "equals 1" in {
@@ -308,7 +307,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       
       println ("too small: " + msg.mkString (","))
 
-      destEp.parsePayload (msg)
+      ep.parsePayload (msg)
     }
   } 
   
@@ -317,14 +316,14 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
       val msg = MessageFactory.invalidVersion
       println ("invalid version: " + msg.mkString (","))
 
-      destEp.parsePayload (msg)
+      ep.parsePayload (msg)
     }
   } 
   
   "smallest" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options, payload" in {
     val msg = MessageFactory.okSmallest
    
-    val smallest = destEp.parsePayload (msg)
+    val smallest = ep.parsePayload (msg)
 
     val cmp = CoapMessage (
       msgType = 1, 
@@ -338,7 +337,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     cmp should sameMessage (smallest)
     
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
  
@@ -347,7 +346,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     a [CoapMessageFormatException] should be thrownBy {
       val msg = MessageFactory.tooSmall2
       
-      destEp.parsePayload (msg)
+      ep.parsePayload (msg)
     }
   }
   
@@ -356,7 +355,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     a [CoapMessageFormatException] should be thrownBy {
       val msg = MessageFactory._TKLReserved
       
-      destEp.parsePayload (msg)
+      ep.parsePayload (msg)
     }
   }
   
@@ -364,7 +363,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL4_ABCD" should "be version 1, type 1, tkl 4, code 2.00, message id 300, token=ABCD, empty options/payload" in {
     val msg = MessageFactory.okTKL4_ABCD
 
-    val okTKL4_ABCD = destEp.parsePayload (msg)
+    val okTKL4_ABCD = ep.parsePayload (msg)
 
     val token = new Array[Byte] (4)
     token(0) = 'A'.toByte
@@ -384,14 +383,14 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     cmp should sameMessage (okTKL4_ABCD)
 
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
   
   "okTKL0_abcd" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token/options, payload=abcd" in {
     val msg = MessageFactory.okTKL0_abcd
 
-    val okTKL0_abcd = destEp.parsePayload (msg)
+    val okTKL0_abcd = ep.parsePayload (msg)
 
     val payload = new Array[Byte](4) 
     payload(0) = 'a'.toByte
@@ -411,7 +410,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     cmp should sameMessage (okTKL0_abcd)
 
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
   
@@ -420,7 +419,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     a [CoapMessageFormatException] should be thrownBy {
       val msg = MessageFactory.finishTKL0_FF
       
-      destEp.parsePayload (msg)
+      ep.parsePayload (msg)
     }
   }
   
@@ -428,7 +427,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL0_Option1_3_abcd" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(3,abcd), empty payload" in {
     val msg = MessageFactory.okTKL0_O_3_abcd
 
-    val okTKL0_O_3_abcd = destEp.parsePayload (msg)
+    val okTKL0_O_3_abcd = ep.parsePayload (msg)
 
     val options = new Array[CoapOption] (1)
     options(0) = CoapOption (3, "abcd".getBytes)    
@@ -445,7 +444,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
     cmp should sameMessage (okTKL0_O_3_abcd)
 
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
   
@@ -453,7 +452,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL0_O_3_abcd_O_5_123" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(3,abcd)::(5,123), empty payload" in {
     val msg = MessageFactory.okTKL0_O_3_abcd_O_5_123
 
-    val okTKL0_O_3_abcd_O_5_123 = destEp.parsePayload (msg)
+    val okTKL0_O_3_abcd_O_5_123 = ep.parsePayload (msg)
 
     val options = new Array[CoapOption] (2)
     options(0) = CoapOption (3, "abcd".getBytes)    
@@ -470,7 +469,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
 
     cmp should sameMessage (okTKL0_O_3_abcd_O_5_123)
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
   
@@ -478,7 +477,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL0_O_16_abcd_O_21_1234567890abcdefg" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(16,abcd)::(21,1234567890abcdefg), empty payload" in {
     val msg = MessageFactory.okTKL0_O_16_abcd_O_21_1234567890abcdefg
 
-    val okTKL0_O_16_abcd_O_21_1234567890abcdefg = destEp.parsePayload (msg)
+    val okTKL0_O_16_abcd_O_21_1234567890abcdefg = ep.parsePayload (msg)
 
     val options = new Array[CoapOption] (2)
     options(0) = CoapOption (16, "abcd".getBytes)    
@@ -495,7 +494,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
 
     cmp should sameMessage (okTKL0_O_16_abcd_O_21_1234567890abcdefg)
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
   
@@ -503,7 +502,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(16,abcd)::(21,1234567890abcdefg), payload=ABCD" in {
     val msg = MessageFactory.okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD
 
-    val okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD = destEp.parsePayload (msg)
+    val okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD = ep.parsePayload (msg)
 
     val options = new Array[CoapOption] (2)
     options(0) = CoapOption (16, "abcd".getBytes)    
@@ -526,7 +525,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
 
     cmp should sameMessage (okTKL0_O_16_abcd_O_21_1234567890abcdefg_P_ABCD)
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
 
@@ -534,7 +533,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
   "okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD" should "be version 1, type 1, tkl 0, code 2.00, message id 300, empty token, options=(16,abcd)::(21,1234567890abcdefg), payload=ABCD" in {
     val msg = MessageFactory.okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD
 
-    val okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD = destEp.parsePayload (msg)
+    val okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD = ep.parsePayload (msg)
 
     val options = new Array[CoapOption] (2)
     options(0) = CoapOption (300, "abcd".getBytes)    
@@ -557,7 +556,7 @@ class MessageSpec extends FlatSpec with Matchers with CoapMessageMatchers {
 
     cmp should sameMessage (okTKL0_O_300_abcd_O_305_1234567890abcdefg_P_ABCD)
     //
-    val msg2 = oriEp.formatPayload (cmp)
+    val msg2 = ep.formatPayload (cmp)
     msg2 should be (msg) 
   }
 }
