@@ -4,6 +4,8 @@ import internet.protocols.coap.CoapConstants
 import internet.protocols.coap.CoapEndpoint
 import internet.protocols.coap.CoapResponse
 import iot.Task
+import iot.VerySimpleScheduler
+import iot.Scheduler
 
 
 object DemoClientMain extends Task {
@@ -32,8 +34,6 @@ object DemoClientMain extends Task {
     new Thread (scheduler).run ()
   }
   
-  var finished = false
-  
   /*
    * 
    */
@@ -47,15 +47,15 @@ object DemoClientMain extends Task {
   /*
    * 
    */
-  def run (): Unit = {
-    if (! finished) {
-      val to = new InetSocketAddress ("127.0.0.1", 9999)
+  def run (scheduler: Scheduler): Unit = {
+    println ("sending one request")
+    
+    val to = new InetSocketAddress ("127.0.0.1", 9999)
       
-      val payload = "/calc/sum/1/2".getBytes()
+    val payload = "/calc/sum/1/2".getBytes()
       
-      ep.request(CoapConstants.GET, payload, to)(processResponse)
-      
-      finished = true
-    }
+    ep.request(CoapConstants.GET, payload, to)(processResponse)
+    
+    scheduler.removeTask (this)
   }
 }

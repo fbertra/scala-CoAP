@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.DatagramChannel
 import iot.Task
+import iot.Scheduler
 
 /*
  * constants as seen by client API
@@ -22,8 +23,14 @@ object CoapConstants {
 }
 
 case class CoapResponse (code: Int, payload: Array[Byte])
+
 case class CoapIncomingRequest (message: CoapMessage, from: SocketAddress)
-case class CoapPendingResponse (time: Long, request: CoapIncomingRequest)
+
+case class CoapPendingResponse (time: Long, request: CoapIncomingRequest, endpoint: CoapEndpoint) {
+  def respond (code: Int, payload: Array[Byte]) = {
+    endpoint.sendResponse (this, code, payload)
+  }
+}
 
 /*
  * 
@@ -33,8 +40,18 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
    * public API
    */
   
-  def registerService (code: Int, payloadStart: Array[Byte], cb: (Int, Array[Byte], Array[Byte]) => Option [CoapResponse]) = {
-    services = CoapRequestPattern (code, payloadStart, cb) :: services 
+  /*
+   * callback cb will always respond inmediately
+   */
+  def registerService (code: Int, payloadStart: Array[Byte], cb: (Int, Array[Byte], Array[Byte]) => CoapResponse) = {
+    services = CoapRequestPattern (code, payloadStart, Left (cb)) :: services 
+  }
+  
+  /*
+   * callback cb may respond later
+   */
+  def registerDelayedService (code: Int, payloadStart: Array[Byte], cb: (CoapPendingResponse) => Unit) = {
+    services = CoapRequestPattern (code, payloadStart, Right (cb)) :: services 
   }
   
   /*
@@ -91,7 +108,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   /*
    * 
    */
-  def run(): Unit = {
+  def run(scheduler: Scheduler): Unit = {
     // eventually receive an incoming message and process it
     receive ()
     
@@ -138,9 +155,10 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
     
     else {
       try {
-        // To-DO: use a global local id instead of coapMessage.token 
-        service.get.cb (coapMessage.code, coapMessage.token, coapMessage.payload) match {
-          case Some (response) => { 
+        service.get.cb match {
+          case Left (cb) => {
+            val response = cb (coapMessage.code, coapMessage.token, coapMessage.payload) 
+            
             // piggyback the response
             CoapMessage (
                msgType = CoapMessageConstants.AcknowledgementType, 
@@ -151,13 +169,18 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
                payload = response.payload
              )
           }
-          case None => {
+          case Right (cb) => {
+            val incomingRequest = CoapIncomingRequest(coapMessage, from)
+            
+            val pending = CoapPendingResponse (System.currentTimeMillis(), incomingRequest, this)
+            
+            cb (pending)
+            
             // TO-DO: distinct clients can use the same token
             val tokenId = fromToken (coapMessage.token)
+            pendingResponses (tokenId) = pending 
             
-            pendingResponses (tokenId) = CoapPendingResponse (System.currentTimeMillis(), CoapIncomingRequest(coapMessage, from))
-            
-            // acknowledge the message, the service will respond later
+            // only acknowledge the message, the service should respond later
             CoapMessage (
                msgType = CoapMessageConstants.AcknowledgementType, 
                code = 0, 
@@ -202,14 +225,23 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
     }
   }
   
-  /*
-   * 
-   */
+  def sendResponse (pendingResponse: CoapPendingResponse, code: Int, payload: Array[Byte]) = {
+    val coapMessage = pendingResponse.request.message.copy (
+           code = code, 
+           messageId = nextMessageId (pendingResponse.request.from),
+           payload = payload
+        )
+        
+    // TO-DO find the pending message 
+      
+    send (coapMessage, pendingResponse.request.from)
+  }
+
   
   /*
    * 
    */
-  case class CoapRequestPattern (code: Int, payloadStart: Array[Byte], cb: (Int, Array[Byte], Array[Byte]) => Option [CoapResponse])
+  case class CoapRequestPattern (code: Int, payloadStart: Array[Byte], cb: Either [(Int, Array[Byte], Array[Byte]) => CoapResponse, (CoapPendingResponse) => Unit])
   
   var services: List [CoapRequestPattern] = Nil
 
