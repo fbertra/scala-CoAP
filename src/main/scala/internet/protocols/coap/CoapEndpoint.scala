@@ -4,34 +4,36 @@ import java.net.SocketAddress
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.DatagramChannel
+import iot.Task
 
 /*
  * constants as seen by client API
  */
 object CoapConstants {
-  val GET  = 0
-  val POST = 1
-  val PUT = 2
+  val GET  = 1
+  val POST = 2
+  val PUT = 3
   val DELETE = 4
   
-  val Ok                   = (2 << 6)       // 2.00
-  val BadRequest           = (4 << 6)       // 4.00  
-  val NotFound             = (4 << 6) | 4   // 4.04  
-  val InternalServerError  = (5 << 6)       // 5.00
+  val Ok                   = (2 << 5)       // 2.00
+  val BadRequest           = (4 << 5)       // 4.00  
+  val NotFound             = (4 << 5) | 4   // 4.04  
+  val InternalServerError  = (5 << 5)       // 5.00
 }
 
 case class CoapResponse (code: Int, payload: Array[Byte])
-case class CoapIncomingRequest (code: Int, payload: Array[Byte], from: SocketAddress)
+case class CoapIncomingRequest (message: CoapMessage, from: SocketAddress)
+case class CoapPendingResponse (time: Long, request: CoapIncomingRequest)
 
 /*
  * 
  */
-class CoapEndpoint (port: Int) extends CoapMessageSerializer {
+class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   /*
    * public API
    */
   
-  def registerService (code: Int, payloadStart: Array[Byte], cb: (CoapIncomingRequest) => Option [CoapResponse]) = {
+  def registerService (code: Int, payloadStart: Array[Byte], cb: (Int, Array[Byte], Array[Byte]) => Option [CoapResponse]) = {
     services = CoapRequestPattern (code, payloadStart, cb) :: services 
   }
   
@@ -46,23 +48,82 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
     }
     else {
       val messageId = nextMessageId (to)
-      val token = nextToken ()
+      val (tokenId, token) = nextToken ()
+      
+      confirmableRequests (tokenId) = cb
       
       val requestMessage = CoapMessage (CoapMessageConstants.ConfirmableType, code, messageId, token, emptyOptions, payload)
       
+      debug ("sending request")
+      debug (requestMessage)
       send (requestMessage, to)
     }
   }
   
   /*
+   * 
+   */
+  def respondTo (id: Int, code: Int, payload: Array[Byte]) = {
+    pendingResponses.get (id) match { 
+      case Some (pending) => {
+        val to = pending.request.from
+        val token = pending.request.message.token
+        val options = pending.request.message.options
+        
+        val coapMessage = CoapMessage (
+           msgType = CoapMessageConstants.ConfirmableType, 
+           code = code, 
+           messageId = nextMessageId (to),
+           token = token,
+           options = options,
+           payload = payload
+        )
+    
+        send (coapMessage, to)    
+      }
+      
+      case None => {
+        debug ("Invalid pending response " + id)
+      }
+    }
+  }
+  
+  /*
+   * 
+   */
+  def run(): Unit = {
+    // eventually receive an incoming message and process it
+    receive ()
+    
+    // TO-DO: re-send confirmable message waiting for acknowledge or response
+  }
+  
+  /*
    * private part
    */
+  
+  val confirmableRequests = new scala.collection.mutable.HashMap [Int, (CoapResponse) => Unit] ()
+  
+  // keep track of the pending response from the local service 
+  val pendingResponses = new scala.collection.mutable.HashMap [Int, CoapPendingResponse] ()
+  
+  
 
   def processIncomingMessage (coapMessage: CoapMessage, from: SocketAddress) = {
-    if (coapMessage.isRequest)
+    if (coapMessage.isRequest) {
+      debug ("processing incoming request")
+      debug (coapMessage)
       processIncomingRequest (coapMessage, from)
-    else if (coapMessage.isResponse)
+    }
+    else if (coapMessage.isResponse) {
+      debug ("processing response")
+      debug (coapMessage)
       processIncomingResponse (coapMessage, from)
+    }
+    // TO-DO CoAP ping
+    else {
+      log ("invalid message code " + coapMessage.code)
+    }
   }
   
   /*
@@ -77,7 +138,8 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
     
     else {
       try {
-        service.get.cb (CoapIncomingRequest (coapMessage.code, coapMessage.payload, from)) match {
+        // To-DO: use a global local id instead of coapMessage.token 
+        service.get.cb (coapMessage.code, coapMessage.token, coapMessage.payload) match {
           case Some (response) => { 
             // piggyback the response
             CoapMessage (
@@ -90,6 +152,11 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
              )
           }
           case None => {
+            // TO-DO: distinct clients can use the same token
+            val tokenId = fromToken (coapMessage.token)
+            
+            pendingResponses (tokenId) = CoapPendingResponse (System.currentTimeMillis(), CoapIncomingRequest(coapMessage, from))
+            
             // acknowledge the message, the service will respond later
             CoapMessage (
                msgType = CoapMessageConstants.AcknowledgementType, 
@@ -111,6 +178,9 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
       }
     }
               
+    //
+    debug ("sending response")
+    debug (coapResponseMessage)
     send (coapResponseMessage, from)
   }
   
@@ -118,21 +188,28 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
    * 
    */
   def processIncomingResponse (coapMessage: CoapMessage, from: SocketAddress) = {
+    val tokenId = fromToken (coapMessage.token)
     
+    confirmableRequests.get (tokenId) match {
+      case Some (cb) => {
+        val response = CoapResponse (coapMessage.code, coapMessage.payload)
+        confirmableRequests.remove (tokenId)
+        cb (response)
+      }
+      case None => {
+        log ("Unexpected token Id " + tokenId)
+      }
+    }
   }
   
   /*
    * 
    */
   
-  def sendResponse (coapMessage: CoapMessage, to: SocketAddress) = {
-    
-  }  
-
   /*
    * 
    */
-  case class CoapRequestPattern (code: Int, payloadStart: Array[Byte], cb: (CoapIncomingRequest) => Option [CoapResponse])
+  case class CoapRequestPattern (code: Int, payloadStart: Array[Byte], cb: (Int, Array[Byte], Array[Byte]) => Option [CoapResponse])
   
   var services: List [CoapRequestPattern] = Nil
 
@@ -164,7 +241,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
   /*
    * TO-DO: not secure at all
    */
-  def nextToken (): Array[Byte] = {
+  def nextToken (): Tuple2 [Int, Array[Byte]] = {
     tokenId = tokenId + 1 
     
     if (tokenId <= 0)
@@ -193,7 +270,19 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
       ret      
     }
     
-    token
+    (tokenId, token)
+  }
+  
+  def fromToken (token: Array[Byte]): Int = {
+    if (token.length == 1) {
+      token (0) & 0xFF
+    }
+    else if (token.length == 2) {
+      parseInt (token, 0)
+    }
+    else {
+      throw new RuntimeException ("token length not supported " + token.length)
+    }
   }
   
   /*
@@ -217,7 +306,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer {
     buf.flip()
   
     if (from != null) {
-      val udpPayload = new Array[Byte] (buf.capacity)
+      val udpPayload = new Array[Byte] (buf.limit())
     
       buf.get (udpPayload)
     

@@ -1,36 +1,58 @@
-import internet.protocols.coap.CoapEndpoint
-import internet.protocols.coap.CoapResponse
-import internet.protocols.coap.CoapIncomingRequest
 import internet.protocols.coap.CoapConstants
+import internet.protocols.coap.CoapEndpoint
+import internet.protocols.coap.CoapIncomingRequest
+import internet.protocols.coap.CoapResponse
+import iot.Task
 
-object DemoServerMain {
+/*
+ * 
+ */
+
+object DemoServerMain extends Task {
   
-  var numInvocation = 0
+  // 
+  var pendingResponse: Option [Tuple3 [Int, Int, Array[Byte]]] = None
   
   /*
    * /calc/sum/1/2 -> 3
    * /calc/sum/10/1 -> 11
    */
-  def serviceSum (req: CoapIncomingRequest):  Option [CoapResponse] = {
-    numInvocation = numInvocation + 1
-    
-    try {
-      val nums = new String (req.payload.drop (9)).split ("/")
-    
+  def serviceSum (code: Int, token: Array[Byte], payload: Array[Byte]):  Option [CoapResponse] = {
+    scheduler.incrInvocation()
+      
+    val szPayload = new String (payload)
+    println ("new incoming request with payload: " + szPayload)
+      
+    val nums = szPayload.substring (10).split ("/")
+
+    //
+    if (nums.size != 2)
+      Some (CoapResponse (CoapConstants.BadRequest, payload))
+    else {
       val num0 = nums(0).toInt
       val num1 = nums(1).toInt
       
       val ret = (num0 + num1).toString.getBytes
       
-      Some (CoapResponse (CoapConstants.Ok, ret))
+      if (num0 < 1000 && num1 < 1000)
+        Some (CoapResponse (CoapConstants.Ok, ret))
+      else {
+        pendingResponse = Some ((num0, num1, token))
+        // simulate a lenghty service: acknowledge the message first and respond later
+        None
+      }          
     }
-    catch {
-      case th : Throwable => {
-        println ("bad URL")
-        th.printStackTrace ()
-        
-        Some (CoapResponse (CoapConstants.BadRequest, req.payload))
-      }
+  }
+  
+  val scheduler = new VerySimpleScheduler
+  
+  var ep: CoapEndpoint = null
+  
+
+  def run () = {
+    if (pendingResponse.isDefined) {
+      
+      pendingResponse = None
     }
   }
   
@@ -44,44 +66,70 @@ object DemoServerMain {
     else
       9999
       
-    val ep = new CoapEndpoint (port)
+    ep = new CoapEndpoint (port)
+    
+    scheduler.addTask (ep)
+    scheduler.addTask (this) 
     
     ep.registerService (CoapConstants.GET, "/calc/sum".getBytes, serviceSum)
     
     println ("Waiting for incoming request on UDP port " + port)
     
-    waitForAWhile ()
+    new Thread (scheduler).run ()
+  }
+}
+
+/*
+ * simulate an mono-thread app which must run different tasks
+ */
+
+class VerySimpleScheduler extends Runnable {
+  var tasks: List[Task] = Nil
+  
+  def run (): Unit = {
+    while (true) {
+      for (task <- tasks) {
+        task.run ()
+      }
+                    
+      waitForAWhile ()
+    }
   }
   
   /*
-   * wati until 10 invocation or 5 minutes after the last invocation
+   * 
+   */
+  def addTask (task: Task) = {
+    tasks = task :: tasks
+  }
+  
+  //
+  var numInvocation = 0
+  var timesWithoutChange = 0
+
+  
+  def incrInvocation () = {
+    numInvocation = numInvocation + 1
+    timesWithoutChange = 0
+  }
+  
+  /*
+   * wait until 10 invocation or 5 minutes after the last invocation
    */
   
-  def waitForAWhile () = { 
-    
-    var lastInvocation = numInvocation
-    
-    var timesWithoutChange = 0
-
-    while (true) {
-      if (numInvocation > 10) {
-        println ("I'm small and I need to rest")
-        System.exit (1)
-      }
+  def waitForAWhile () = {     
+    if (numInvocation > 10) {
+      println ("I'm small and I need to rest")
+      System.exit (1)
+    }
       
-      Thread.sleep (1000L)
+    Thread.sleep (100L)
       
-      if (lastInvocation == numInvocation) 
-        timesWithoutChange = timesWithoutChange + 1        
-      else {
-        lastInvocation = numInvocation
-        timesWithoutChange = 0
-      }
+    timesWithoutChange = timesWithoutChange + 1        
       
-      if (timesWithoutChange > 5 * 30) {
-        println ("I'm small and I'm getting bored fast")
-        System.exit (1)
-      }
+    if (timesWithoutChange > 5 * 30 * 10) {
+      println ("I'm small and I'm getting bored fast")
+      System.exit (1)
     }
   }
 }
