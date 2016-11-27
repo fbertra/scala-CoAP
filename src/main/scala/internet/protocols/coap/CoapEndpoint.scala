@@ -197,7 +197,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   /*
    * 
    */
-  private [coap] def sendResponse (pendingResponse: CoapPendingResponse, code: Int, payload: Array[Byte]) = {
+  private[coap] def sendResponse (pendingResponse: CoapPendingResponse, code: Int, payload: Array[Byte]) = {
     val coapMessage = pendingResponse.request.message.copy (
            code = code, 
            messageId = nextMessageId (pendingResponse.request.from),
