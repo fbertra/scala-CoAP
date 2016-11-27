@@ -1,10 +1,10 @@
 package iot
 
 trait Task {
-  def run(schedueler: Scheduler): Unit
+  def runTask(scheduler: Scheduler): Unit
 }
 
-trait Scheduler {
+trait Scheduler extends java.lang.Runnable {
   def addTask (task: Task)
   
   def removeTask (task: Task)

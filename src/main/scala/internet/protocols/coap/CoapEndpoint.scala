@@ -49,6 +49,8 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   
   /*
    * callback cb may respond later
+   * 
+   * the service is responsible to keep track of pending response
    */
   def registerDelayedService (code: Int, payloadStart: Array[Byte], cb: (CoapPendingResponse) => Unit) = {
     services = CoapRequestPattern (code, payloadStart, Right (cb)) :: services 
@@ -80,35 +82,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   /*
    * 
    */
-  def respondTo (id: Int, code: Int, payload: Array[Byte]) = {
-    pendingResponses.get (id) match { 
-      case Some (pending) => {
-        val to = pending.request.from
-        val token = pending.request.message.token
-        val options = pending.request.message.options
-        
-        val coapMessage = CoapMessage (
-           msgType = CoapMessageConstants.ConfirmableType, 
-           code = code, 
-           messageId = nextMessageId (to),
-           token = token,
-           options = options,
-           payload = payload
-        )
-    
-        send (coapMessage, to)    
-      }
-      
-      case None => {
-        debug ("Invalid pending response " + id)
-      }
-    }
-  }
-  
-  /*
-   * 
-   */
-  def run(scheduler: Scheduler): Unit = {
+  def runTask(scheduler: Scheduler): Unit = {
     // eventually receive an incoming message and process it
     receive ()
     
@@ -121,12 +95,8 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   
   val confirmableRequests = new scala.collection.mutable.HashMap [Int, (CoapResponse) => Unit] ()
   
-  // keep track of the pending response from the local service 
-  val pendingResponses = new scala.collection.mutable.HashMap [Int, CoapPendingResponse] ()
-  
-  
 
-  def processIncomingMessage (coapMessage: CoapMessage, from: SocketAddress) = {
+  private def processIncomingMessage (coapMessage: CoapMessage, from: SocketAddress) = {
     if (coapMessage.isRequest) {
       debug ("processing incoming request")
       debug (coapMessage)
@@ -146,7 +116,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   /*
    * 
    */
-  def processIncomingRequest (coapMessage: CoapMessage, from: SocketAddress) = {
+  private def processIncomingRequest (coapMessage: CoapMessage, from: SocketAddress) = {
     val service = services.find (service => service.code == coapMessage.code && coapMessage.payload.startsWith(service.payloadStart))
     
     val coapResponseMessage = if (service.isEmpty) {
@@ -178,7 +148,6 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
             
             // TO-DO: distinct clients can use the same token
             val tokenId = fromToken (coapMessage.token)
-            pendingResponses (tokenId) = pending 
             
             // only acknowledge the message, the service should respond later
             CoapMessage (
@@ -210,7 +179,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   /*
    * 
    */
-  def processIncomingResponse (coapMessage: CoapMessage, from: SocketAddress) = {
+  private def processIncomingResponse (coapMessage: CoapMessage, from: SocketAddress) = {
     val tokenId = fromToken (coapMessage.token)
     
     confirmableRequests.get (tokenId) match {
@@ -225,15 +194,16 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
     }
   }
   
-  def sendResponse (pendingResponse: CoapPendingResponse, code: Int, payload: Array[Byte]) = {
+  /*
+   * 
+   */
+  private [coap] def sendResponse (pendingResponse: CoapPendingResponse, code: Int, payload: Array[Byte]) = {
     val coapMessage = pendingResponse.request.message.copy (
            code = code, 
            messageId = nextMessageId (pendingResponse.request.from),
            payload = payload
         )
         
-    // TO-DO find the pending message 
-      
     send (coapMessage, pendingResponse.request.from)
   }
 

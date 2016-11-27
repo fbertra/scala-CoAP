@@ -1,5 +1,4 @@
 import java.net.InetSocketAddress
-
 import internet.protocols.coap.CoapConstants
 import internet.protocols.coap.CoapEndpoint
 import internet.protocols.coap.CoapResponse
@@ -8,12 +7,58 @@ import iot.VerySimpleScheduler
 import iot.Scheduler
 
 
-object DemoClientMain extends Task {
+/*
+ * 
+ */
+class DemoClient (ep: CoapEndpoint) extends Task {
+  var incr = 0
   
-  val scheduler = new VerySimpleScheduler
+  val to = new InetSocketAddress ("127.0.0.1", 9999)
+      
+  /*
+   * 
+   */
+  def runTask (scheduler: Scheduler): Unit = {
+    println ("run task " + incr)
+    
+    if (incr == 0)
+      sendSum
+    else if (incr == 19)
+      sendSlow
+      
+    incr += 1
+
+    if (incr > 100) {
+      scheduler.shutdown()
+    }
+      
+  }
   
-  var ep: CoapEndpoint = null
+  def sendSum = send ("/calc/sum/1/2")
   
+  def sendSlow = send ("/calc/slow")
+  
+  def send (payload: String) = {
+    println ("sending request: " + payload)
+    
+    ep.request(CoapConstants.GET, payload.getBytes(), to)(processResponse)
+  }
+  
+  /*
+   * 
+   */  
+  def processResponse (response: CoapResponse): Unit = {
+    val sz = new String (response.payload)
+    
+    println ("response payload " + sz)
+  }
+}
+
+
+/*
+ * 
+ */
+object DemoClientMain {  
   /*
    * 
    */
@@ -24,38 +69,23 @@ object DemoClientMain extends Task {
     else
       10000
       
-    ep = new CoapEndpoint (port)
-    
-    scheduler.addTask (ep)
-    scheduler.addTask (this)
-    
     println ("Sending coap message from UDP port " + port)
     
+    val ep = new CoapEndpoint (port)
+    val sender = new DemoClient (ep)
+    
+    val scheduler = new VerySimpleScheduler
+  
+    scheduler.addTask (ep)
+    scheduler.addTask (sender)
+    
+    controlLoop (scheduler)
+  }
+  
+  /*
+   * 
+   */ 
+  def controlLoop (scheduler: Scheduler) = {
     new Thread (scheduler).run ()
-  }
-  
-  /*
-   * 
-   */
-  
-  def processResponse (response: CoapResponse): Unit = {
-    val sz = new String (response.payload)
-    
-    println ("response payload " + sz)
-  }
-
-  /*
-   * 
-   */
-  def run (scheduler: Scheduler): Unit = {
-    println ("sending one request")
-    
-    val to = new InetSocketAddress ("127.0.0.1", 9999)
-      
-    val payload = "/calc/sum/1/2".getBytes()
-      
-    ep.request(CoapConstants.GET, payload, to)(processResponse)
-    
-    scheduler.removeTask (this)
   }
 }

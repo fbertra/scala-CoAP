@@ -9,8 +9,14 @@ import iot.VerySimpleScheduler
 /*
  * 
  */
-object DemoServerMain extends Task {
+class DemoServer (ep: CoapEndpoint) extends Task {
   
+  // inmediate response
+  ep.registerService (CoapConstants.GET, "/calc/sum".getBytes, serviceSum)
+  
+  // delayed response
+  ep.registerDelayedService (CoapConstants.GET, "/calc/slow".getBytes, serviceSlow)
+    
   // 
   var pendingResponse: Option [CoapPendingResponse] = None
   
@@ -51,7 +57,7 @@ object DemoServerMain extends Task {
   /*
    * 
    */
-  def run (scheduler: Scheduler) = {
+  def runTask (scheduler: Scheduler) = {
     if (pendingResponse.isDefined) {
       // TO-DO: send a delayed response
       
@@ -68,7 +74,7 @@ object DemoServerMain extends Task {
       
     timesWithoutChange = timesWithoutChange + 1        
       
-    if (timesWithoutChange > 5 * 30 * 10) {
+    if (timesWithoutChange > 100) {
       println ("I'm small and I'm getting bored fast")
       scheduler.shutdown ()
     }
@@ -83,6 +89,12 @@ object DemoServerMain extends Task {
     numInvocation = numInvocation + 1
     timesWithoutChange = 0
   }
+}
+
+/*
+ *  
+ */
+object DemoServerMain {
   
   /*
    * 
@@ -99,12 +111,17 @@ object DemoServerMain extends Task {
     val ep = new CoapEndpoint (port)
     
     scheduler.addTask (ep)
-    scheduler.addTask (this) 
-    
-    ep.registerService (CoapConstants.GET, "/calc/sum".getBytes, serviceSum)
+    scheduler.addTask (new DemoServer (ep)) 
     
     println ("Waiting for incoming request on UDP port " + port)
     
+    controlLoop (scheduler)
+  }
+  
+  /*
+   * 
+   */ 
+  def controlLoop (scheduler: Scheduler) = {
     new Thread (scheduler).run ()
   }
 }

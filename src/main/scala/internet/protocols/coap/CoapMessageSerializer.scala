@@ -8,7 +8,7 @@ object CoapMessageFormat {
 }
 
 /*
- * format and parse a CoapMessage to/form network UDP payload
+ * format and parse a CoapMessage to/from network UDP payload
  */
 trait CoapMessageSerializer extends CoapUtil {
   /* parse methods */
@@ -147,8 +147,6 @@ trait CoapMessageSerializer extends CoapUtil {
     CoapMessage (msgType, code, messageId, token, options, payload)
   }
   
-  /* format methods */
-  
   /*
    *
    */
@@ -157,6 +155,8 @@ trait CoapMessageSerializer extends CoapUtil {
   }
  
  
+  /* format methods */
+  
   private def sizeOptions (options: Array[CoapOption]): Int = {
     def sizeNumber (num: Int) = {
       if (num <= 12) 

@@ -4,13 +4,13 @@ package iot
  * to simulate a mono-thread app which must run different tasks
  */
 
-class VerySimpleScheduler extends Runnable with Scheduler {
+class VerySimpleScheduler extends Scheduler {
   var tasks: List[Task] = Nil
   
   def run (): Unit = {
     while (true) {
       for (task <- tasks) {
-        task.run (this)
+        task.runTask (this)
       }
                     
       waitForAWhile ()
