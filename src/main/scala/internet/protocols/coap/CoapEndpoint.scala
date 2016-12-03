@@ -80,6 +80,22 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   }
   
   /*
+   * useful for a stream of events
+   * 
+   * non confirmable by default
+   * PUT by default
+   */
+  def fireAndForget (payload: Array[Byte], to: SocketAddress) {
+    val messageId = nextMessageId (to)
+      
+    val message = CoapMessage (CoapMessageConstants.NonConfirmableType, CoapConstants.PUT, messageId, empty, emptyOptions, payload)
+    
+    debug ("sending fire and forget message")
+    debug (message)
+    send (message, to)
+  }
+  
+  /*
    * 
    */
   def runTask(scheduler: Scheduler): Unit = {
@@ -108,6 +124,9 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
       processIncomingResponse (coapMessage, from)
     }
     // TO-DO CoAP ping
+    else if (coapMessage.isEmpty) {
+      debug ("processing acknowledgement for message id " + coapMessage.messageId) 
+    }
     else {
       log ("invalid message code " + coapMessage.code)
     }
@@ -120,25 +139,33 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
     val service = services.find (service => service.code == coapMessage.code && coapMessage.payload.startsWith(service.payloadStart))
     
     val coapResponseMessage = if (service.isEmpty) {
-      coapMessage.copy (msgType = CoapMessageConstants.AcknowledgementType, code = CoapConstants.NotFound)      
+      log ("service not found: " + coapMessage.code + ", " + new String (coapMessage.payload))
+      Some (coapMessage.copy (msgType = CoapMessageConstants.AcknowledgementType, code = CoapConstants.NotFound))      
     }
     
     else {
       try {
         service.get.cb match {
+          
           case Left (cb) => {
             val response = cb (coapMessage.code, coapMessage.token, coapMessage.payload) 
             
-            // piggyback the response
-            CoapMessage (
-               msgType = CoapMessageConstants.AcknowledgementType, 
-               code = response.code, 
-               messageId = nextMessageId (from),
-               token = coapMessage.token,
-               options = coapMessage.options,
-               payload = response.payload
-             )
+            val responseType = if (coapMessage.isConfirmable) 
+              // piggyback the response
+              CoapMessageConstants.AcknowledgementType 
+            else 
+              CoapMessageConstants.NonConfirmableType
+              
+            Some (CoapMessage (
+              msgType = responseType,  
+              code = response.code, 
+              messageId = coapMessage.messageId,
+              token = coapMessage.token,
+              options = coapMessage.options,
+              payload = response.payload
+            ))
           }
+          
           case Right (cb) => {
             val incomingRequest = CoapIncomingRequest(coapMessage, from)
             
@@ -149,15 +176,19 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
             // TO-DO: distinct clients can use the same token
             val tokenId = fromToken (coapMessage.token)
             
-            // only acknowledge the message, the service should respond later
-            CoapMessage (
+            if (coapMessage.isConfirmable) {
+              // only acknowledge the message, the service should respond later
+              Some (CoapMessage (
                msgType = CoapMessageConstants.AcknowledgementType, 
                code = 0, 
                messageId = coapMessage.messageId,
                token = empty,
                options = emptyOptions,
                payload = empty
-             )
+             ))
+            }
+            else
+              None
           }
         }
       }
@@ -165,15 +196,23 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
         case th: Throwable => {
           logMessageError (coapMessage, th)
           
-          coapMessage.copy (msgType = CoapMessageConstants.AcknowledgementType, code = CoapConstants.InternalServerError)
+          // TO-DO: see if Reset is better
+          Some (coapMessage.copy (msgType = CoapMessageConstants.AcknowledgementType, code = CoapConstants.InternalServerError))
         }
       }
     }
               
     //
-    debug ("sending response")
-    debug (coapResponseMessage)
-    send (coapResponseMessage, from)
+    coapResponseMessage match {
+      case Some (message) => {
+        debug ("sending response")
+        debug (message)
+        send (message, from)
+      }
+      case None => {
+        debug ("non confirmable message don't need acknowledge")
+      }      
+    }
   }
   
   /*
@@ -204,6 +243,11 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
            payload = payload
         )
         
+    assert (coapMessage.isResponse)
+        
+    debug ("sending response")
+    debug (coapMessage)
+   
     send (coapMessage, pendingResponse.request.from)
   }
 

@@ -25,8 +25,6 @@ class DemoServer (ep: CoapEndpoint) extends Task {
    * /calc/sum/10/1 -> 11
    */
   def serviceSum (code: Int, token: Array[Byte], payload: Array[Byte]): CoapResponse = {
-    incrInvocation()
-      
     val szPayload = new String (payload)
     println ("new incoming request with payload: " + szPayload)
       
@@ -49,10 +47,10 @@ class DemoServer (ep: CoapEndpoint) extends Task {
    * /calc/slow/xyz -> xyz
    */
   def serviceSlow (pending: CoapPendingResponse): Unit = {
-    incrInvocation()
-    
     pendingResponse = Some (pending)
   }
+  
+  var initSendAndForget: Option [java.net.SocketAddress] = None
   
   /*
    * 
@@ -63,32 +61,15 @@ class DemoServer (ep: CoapEndpoint) extends Task {
       
       pendingResponse.get.respond (CoapConstants.Ok, pendingResponse.get.request.message.payload)
       
+      // and start sending fire and forget messages
+      initSendAndForget = Some (pendingResponse.get.request.from)
+      
       pendingResponse = None
     }
-    
-    // 
-    if (numInvocation > 10) {
-      println ("I'm small and I need to rest")
-      scheduler.shutdown ()
+    else if (initSendAndForget.isDefined) {
+      ep.fireAndForget("/measure/#0".getBytes, initSendAndForget.get)
     }
-      
-    timesWithoutChange = timesWithoutChange + 1        
-      
-    if (timesWithoutChange > 100) {
-      println ("I'm small and I'm getting bored fast")
-      scheduler.shutdown ()
-    }
-   }
-  
-  //
-  var numInvocation = 0
-  var timesWithoutChange = 0
-
-  
-  def incrInvocation () = {
-    numInvocation = numInvocation + 1
-    timesWithoutChange = 0
-  }
+  } 
 }
 
 /*

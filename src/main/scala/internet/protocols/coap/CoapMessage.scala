@@ -75,12 +75,24 @@ case class CoapMessage(
    *
    */
   def isReserved: Boolean = ! (isEmpty || isRequest || isResponse)
+  
+  /*
+   * 
+   */
+  
+  def isConfirmable     = msgType == CoapMessageConstants.ConfirmableType
+  def isNonConfirmable  = msgType == CoapMessageConstants.NonConfirmableType
+  def isAcknowledgement = msgType == CoapMessageConstants.AcknowledgementType 
+  def isReset           = msgType == CoapMessageConstants.ResetType
 
   /*
    *
    */
   def validate() {
     import CoapMessageConstants._
+    
+    if (msgType < ConfirmableType || msgType > ResetType)
+      throw new CoapMessageFormatException ("Invalid message type " + msgType)
 
     if (isReserved)
       throw new CoapMessageFormatException ("Method Code is reserved: " + codeC + "." + codeDD)
@@ -98,13 +110,13 @@ case class CoapMessage(
       throw new CoapMessageFormatException ("Non Empty message")
 
     // table 1 section 4.2 and 4.3
-    if (isRequest && ! (msgType == ConfirmableType || msgType == NonConfirmableType))
+    if (isRequest && (! (isConfirmable || isNonConfirmable)))
       throw new CoapMessageFormatException ("Request cannot be Acknowledgement and Reset")
 
-    if (isResponse && msgType == ResetType)
+    if (isResponse && isReset)
       throw new CoapMessageFormatException ("Response cannot be Reset")
 
-    if (isEmpty && msgType == NonConfirmableType)
+    if (isEmpty && isNonConfirmable)
       throw new CoapMessageFormatException ("Empty cannot be non confirmable")
   }
 }
