@@ -42,4 +42,8 @@ trait CoapUtil {
     
     (byte0, byte1)
   }
+  
+  def parseInt (bytes: Array[Byte], offset: Int): Int = {
+    toInt(bytes(offset), bytes(offset+1))
+  } 
 }

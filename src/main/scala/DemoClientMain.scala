@@ -5,6 +5,7 @@ import internet.protocols.coap.CoapResponse
 import iot.Task
 import iot.VerySimpleScheduler
 import iot.Scheduler
+import internet.protocols.coap.CoapPendingResponse
 
 
 /*
@@ -14,6 +15,15 @@ class DemoClient (ep: CoapEndpoint) extends Task {
   var incr = 0
   
   val to = new InetSocketAddress ("127.0.0.1", 9999)
+  
+  ep.registerDelayedService (CoapConstants.PUT, "/measure/".getBytes, printMeasure)
+  
+  /*
+   * 
+   */
+  def printMeasure (pending: CoapPendingResponse) {
+    println ("measure " + new String (pending.request.message.payload))
+  }
       
   /*
    * 

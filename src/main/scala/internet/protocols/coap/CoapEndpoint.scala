@@ -66,16 +66,15 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
       cb (new CoapResponse (CoapConstants.BadRequest, empty))
     }
     else {
-      val messageId = nextMessageId (to)
-      val (tokenId, token) = nextToken ()
+      val transmission = getOrCreateRetransmission (to)
       
-      confirmableRequests (tokenId) = cb
+      val (messageId, tokenId, token) = transmission.newConfirmableRequest (cb)
       
       val requestMessage = CoapMessage (CoapMessageConstants.ConfirmableType, code, messageId, token, emptyOptions, payload)
       
       debug ("sending request")
       debug (requestMessage)
-      send (requestMessage, to)
+      udpIntf.send (requestMessage, to)
     }
   }
   
@@ -86,13 +85,14 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
    * PUT by default
    */
   def fireAndForget (payload: Array[Byte], to: SocketAddress) {
-    val messageId = nextMessageId (to)
+    val transmission = getOrCreateRetransmission (to)
+    val messageId = transmission.nextMessageId ()
       
     val message = CoapMessage (CoapMessageConstants.NonConfirmableType, CoapConstants.PUT, messageId, empty, emptyOptions, payload)
     
     debug ("sending fire and forget message")
     debug (message)
-    send (message, to)
+    udpIntf.send (message, to)
   }
   
   /*
@@ -100,7 +100,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
    */
   def runTask(scheduler: Scheduler): Unit = {
     // eventually receive an incoming message and process it
-    receive ()
+    udpIntf.receive ()
     
     // TO-DO: re-send confirmable message waiting for acknowledge or response
   }
@@ -109,10 +109,9 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
    * private part
    */
   
-  val confirmableRequests = new scala.collection.mutable.HashMap [Int, (CoapResponse) => Unit] ()
+  val udpIntf = new UdpIntf (port, this)
   
-
-  private def processIncomingMessage (coapMessage: CoapMessage, from: SocketAddress) = {
+  def processIncomingMessage (coapMessage: CoapMessage, from: SocketAddress) = {
     if (coapMessage.isRequest) {
       debug ("processing incoming request")
       debug (coapMessage)
@@ -135,12 +134,31 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   /*
    * 
    */
+  def requestMethodName (basicMethod: Int): String = {
+    basicMethod match {
+      case CoapConstants.GET    => "GET"
+      case CoapConstants.PUT    => "PUT"
+      case CoapConstants.POST   => "POST"
+      case CoapConstants.DELETE => "DELETE"
+    }
+  }
+  
+  /*
+   * 
+   */
   private def processIncomingRequest (coapMessage: CoapMessage, from: SocketAddress) = {
     val service = services.find (service => service.code == coapMessage.code && coapMessage.payload.startsWith(service.payloadStart))
-    
+
+    // the default response type
+    val responseType = if (coapMessage.isConfirmable) 
+      // piggyback the response
+      CoapMessageConstants.AcknowledgementType 
+    else 
+      CoapMessageConstants.NonConfirmableType
+              
     val coapResponseMessage = if (service.isEmpty) {
-      log ("service not found: " + coapMessage.code + ", " + new String (coapMessage.payload))
-      Some (coapMessage.copy (msgType = CoapMessageConstants.AcknowledgementType, code = CoapConstants.NotFound))      
+      log ("service not found: " + requestMethodName (coapMessage.code) + " " + new String (coapMessage.payload))
+      Some (coapMessage.copy (msgType = responseType, code = CoapConstants.NotFound))      
     }
     
     else {
@@ -150,12 +168,6 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
           case Left (cb) => {
             val response = cb (coapMessage.code, coapMessage.token, coapMessage.payload) 
             
-            val responseType = if (coapMessage.isConfirmable) 
-              // piggyback the response
-              CoapMessageConstants.AcknowledgementType 
-            else 
-              CoapMessageConstants.NonConfirmableType
-              
             Some (CoapMessage (
               msgType = responseType,  
               code = response.code, 
@@ -172,9 +184,6 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
             val pending = CoapPendingResponse (System.currentTimeMillis(), incomingRequest, this)
             
             cb (pending)
-            
-            // TO-DO: distinct clients can use the same token
-            val tokenId = fromToken (coapMessage.token)
             
             if (coapMessage.isConfirmable) {
               // only acknowledge the message, the service should respond later
@@ -197,7 +206,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
           logMessageError (coapMessage, th)
           
           // TO-DO: see if Reset is better
-          Some (coapMessage.copy (msgType = CoapMessageConstants.AcknowledgementType, code = CoapConstants.InternalServerError))
+          Some (coapMessage.copy (msgType = responseType, code = CoapConstants.InternalServerError))
         }
       }
     }
@@ -207,7 +216,7 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
       case Some (message) => {
         debug ("sending response")
         debug (message)
-        send (message, from)
+        udpIntf.send (message, from)
       }
       case None => {
         debug ("non confirmable message don't need acknowledge")
@@ -219,36 +228,38 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
    * 
    */
   private def processIncomingResponse (coapMessage: CoapMessage, from: SocketAddress) = {
-    val tokenId = fromToken (coapMessage.token)
+    val transmission = getOrCreateRetransmission (from)
+      
+    val cb = transmission.newResponse (coapMessage)
     
-    confirmableRequests.get (tokenId) match {
-      case Some (cb) => {
-        val response = CoapResponse (coapMessage.code, coapMessage.payload)
-        confirmableRequests.remove (tokenId)
-        cb (response)
-      }
-      case None => {
-        log ("Unexpected token Id " + tokenId)
-      }
-    }
+    cb.foreach (callback => {
+      val response = CoapResponse (coapMessage.code, coapMessage.payload)
+      
+      callback (response)
+    })
+
   }
   
   /*
    * 
    */
   private[coap] def sendResponse (pendingResponse: CoapPendingResponse, code: Int, payload: Array[Byte]) = {
-    val coapMessage = pendingResponse.request.message.copy (
-           code = code, 
-           messageId = nextMessageId (pendingResponse.request.from),
-           payload = payload
-        )
+    val _request = pendingResponse.request.message
+    
+    val transmission = getOrCreateRetransmission (pendingResponse.request.from)
+      
+    val coapMessage = _request.copy (
+      code = code, 
+      messageId = transmission.nextMessageId (),
+      payload = payload
+    )
         
     assert (coapMessage.isResponse)
         
     debug ("sending response")
     debug (coapMessage)
    
-    send (coapMessage, pendingResponse.request.from)
+    udpIntf.send (coapMessage, pendingResponse.request.from)
   }
 
   
@@ -263,120 +274,20 @@ class CoapEndpoint (port: Int) extends CoapMessageSerializer with Task {
   val emptyOptions = new Array[CoapOption] (0)
   
   /*
-   * TO-DO: should be by origin/destination address 
-   */
-  var messageId = 1
-  
-  /*
-   * TO-DO: not secure at all
-   */
-  def nextMessageId (to: SocketAddress) = {
-    messageId = messageId + 1
-    if (messageId >= Short.MaxValue)
-      messageId = 0
-    
-    messageId
-  }
-  
-  /*
    * 
    */
-  
-  var tokenId = 1000
-  
-  /*
-   * TO-DO: not secure at all
-   */
-  def nextToken (): Tuple2 [Int, Array[Byte]] = {
-    tokenId = tokenId + 1 
-    
-    if (tokenId <= 0)
-      tokenId = 0
-   
-    val token = if (tokenId <= Byte.MaxValue) {
-      val ret = new Array[Byte](1)
-      ret(0) = tokenId.toByte
-      ret
-    }
-    else if (tokenId <= Short.MaxValue) {
-      val ret = new Array[Byte](2)
-      val (byte0, byte1) = fromInt(tokenId)
-      ret(0) = byte0
-      ret(1) = byte1
-      ret
-    }
-    else {
-      val ret = new Array[Byte](4)
-      val (byte0, byte1) = fromInt(tokenId >>> 16)
-      ret(0) = byte0
-      ret(1) = byte1
-      val (byte2, byte3) = fromInt(tokenId & 0xFFFF)
-      ret(2) = byte2
-      ret(3) = byte3
-      ret      
-    }
-    
-    (tokenId, token)
-  }
-  
-  def fromToken (token: Array[Byte]): Int = {
-    if (token.length == 1) {
-      token (0) & 0xFF
-    }
-    else if (token.length == 2) {
-      parseInt (token, 0)
-    }
-    else {
-      throw new RuntimeException ("token length not supported " + token.length)
-    }
-  }
-  
-  /*
-   * UDP level with java.nio
-   */
-  
-  // mono thread, one receive or one send at the same time
-  val buf = ByteBuffer.allocate(2048)
-  
-  val channel = DatagramChannel.open ()
-  channel.socket ().bind (new InetSocketAddress (port))
-  channel.configureBlocking(false)
-  
-  /*
-   *
-   */
-  private def receive (): Unit = {
-    
-    buf.clear()
-    val from = channel.receive(buf)
-    buf.flip()
-  
-    if (from != null) {
-      val udpPayload = new Array[Byte] (buf.limit())
-    
-      buf.get (udpPayload)
-    
-      val message = try {
-        Some (parsePayload (udpPayload))
-      }
-      catch {
-        case th: Throwable => logMessageError (udpPayload, th); None
-      }
-    
-      message.foreach (processIncomingMessage (_, from))
-    }
-  }
 
-  /*
-   *
-   */
-  private def send (message: CoapMessage, to: SocketAddress): Int = {
-    val payload = formatPayload (message)
-    
-    buf.clear()
-    buf.put(payload)
-    buf.flip()
-
-    channel.send (buf, to)
+  private var transmissionMap = new scala.collection.mutable.HashMap [SocketAddress, CoapRetransmission] ()
+  
+  private def getOrCreateRetransmission (addr: SocketAddress): CoapRetransmission = {
+    transmissionMap.get (addr) match {
+      case Some (transmission) => transmission
+      case None => {
+        val transmission = new CoapRetransmission ()
+        transmissionMap (addr) = transmission
+        transmission
+      }
+    }
   }
+  
 }

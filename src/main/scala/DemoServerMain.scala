@@ -52,6 +52,8 @@ class DemoServer (ep: CoapEndpoint) extends Task {
   
   var initSendAndForget: Option [java.net.SocketAddress] = None
   
+  var measureNum = 1
+  
   /*
    * 
    */
@@ -67,7 +69,8 @@ class DemoServer (ep: CoapEndpoint) extends Task {
       pendingResponse = None
     }
     else if (initSendAndForget.isDefined) {
-      ep.fireAndForget("/measure/#0".getBytes, initSendAndForget.get)
+      ep.fireAndForget(("/measure/#" * measureNum).getBytes, initSendAndForget.get)
+      measureNum = measureNum + 1
     }
   } 
 }

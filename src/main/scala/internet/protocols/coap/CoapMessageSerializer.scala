@@ -147,13 +147,6 @@ trait CoapMessageSerializer extends CoapUtil {
     CoapMessage (msgType, code, messageId, token, options, payload)
   }
   
-  /*
-   *
-   */
-  def parseInt (bytes: Array[Byte], offset: Int): Int = {
-    toInt(bytes(offset), bytes(offset+1))
-  }
- 
  
   /* format methods */
   
